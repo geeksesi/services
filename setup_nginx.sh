@@ -3,9 +3,6 @@
 DOMAIN=$1
 PORT=$2
 
-# Generate SSL certificates
-mkcert $DOMAIN
-
 # Create Nginx config
 cat > /home/geeksesi/public_html/services/$DOMAIN.conf <<EOL
 server{
@@ -20,8 +17,8 @@ server {
     listen 443 ssl;
     server_name $DOMAIN www.$DOMAIN;
 
-    ssl_certificate /home/geeksesi/public_html/services/$DOMAIN.pem;
-    ssl_certificate_key /home/geeksesi/public_html/services/$DOMAIN-key.pem;
+    ssl_certificate /home/geeksesi/public_html/services/$DOMAIN.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/$DOMAIN.key;
 
     location / {
         proxy_pass http://localhost:$PORT;
