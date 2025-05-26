@@ -15,10 +15,10 @@ server{
 }
 server {
     listen 443 ssl;
-    server_name $DOMAIN www.$DOMAIN;
+    server_name $DOMAIN;
 
-    ssl_certificate /home/geeksesi/public_html/services/$DOMAIN.crt;
-    ssl_certificate_key /home/geeksesi/public_html/services/$DOMAIN.key;
+    ssl_certificate /home/geeksesi/public_html/services/$DOMAIN/$DOMAIN.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/$DOMAIN/$DOMAIN.key;
 
     location / {
         proxy_pass http://localhost:$PORT;
