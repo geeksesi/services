@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -eu
 org=tusi.test-ca
-domain=nakama.tusi.test
+domain=tusi.test
+
+mkdir -p "$domain"
+
+cd "$domain"
 
 sudo trust anchor --remove ca.crt || true
 
