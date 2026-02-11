@@ -15,3 +15,5 @@ nakama.test
 wp.test
 coach.test
 api.coach.test
+admin.coach.test
+bb.test
