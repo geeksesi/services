@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eu
-org=bb.test-ca
-domain=bb.test
+org=api.dezh.test-ca
+domain=api.dezh.test
 
 mkdir -p "$domain"
 
