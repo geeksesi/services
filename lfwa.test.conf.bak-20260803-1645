@@ -1,0 +1,235 @@
+# ---------------------------------------------------------------------------------------------------
+# lfwa.test — the LFWA devnet, reachable by name instead of by port.
+#
+# Install with devnet/nginx/install-lfwa-test.sh, which symlinks this file into
+# /etc/nginx/sites-enabled/, issues the certificate through services/ssl.sh, and adds the /etc/hosts
+# entries. Written to match the pattern already in /home/geeksesi/public_html/services/.
+#
+# Every upstream is a loopback port published by devnet/compose.yaml. Nothing here reaches into the
+# compose network, so the stack keeps working identically whether you browse by name or by port.
+# ---------------------------------------------------------------------------------------------------
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name lfwa.test admin.lfwa.test api.lfwa.test scan.lfwa.test pgweb.lfwa.test rpc.lfwa.test control.lfwa.test;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# lfwa.test — the public frontend (port 8070).
+#
+# This is the lfwa.fun prediction-market UI, built from the frontend/ submodule of lfwa-polymarket.
+# The apex lfwa.test used to be absent (it belonged to another repository); now it points here.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8070;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# admin.lfwa.test — the administrator interface (Vite dev server, port 5173).
+#
+# The websocket block is not optional: it carries Vite's hot reload. The dev server also needs
+# VITE_ALLOWED_HOSTS and VITE_PUBLIC_HOST set in devnet/.env, or it answers "Blocked request" and the
+# reload client dials a port nginx is not listening on. See the commented block in .env.example.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name admin.lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# api.lfwa.test — the product API (port 3000).
+#
+# Most of its interesting routes answer 503 by design today: no chain port is wired into
+# PublicReadModule/IntentModule, so market reads and intents refuse with a stated reason. /health is
+# real. That is a property of the application, not of this proxy.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name api.lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        # ponytail: devnet-only CORS so the admin UI at admin.lfwa.test can reach this API cross-origin.
+        # No code change, no dependency — nginx handles the preflight and the headers.
+        if ($request_method = OPTIONS) {
+            add_header Access-Control-Allow-Origin "https://admin.lfwa.test" always;
+            add_header Access-Control-Allow-Credentials "true" always;
+            add_header Access-Control-Allow-Methods "GET, POST, DELETE, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "content-type, accept" always;
+            add_header Content-Length 0;
+            return 204;
+        }
+
+        proxy_pass http://127.0.0.1:3000;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+
+        add_header Access-Control-Allow-Origin "https://admin.lfwa.test" always;
+        add_header Access-Control-Allow-Credentials "true" always;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# scan.lfwa.test — Otterscan (port 5100).
+#
+# Otterscan is a static page that talks to the chain FROM THE BROWSER. Serving it over https therefore
+# requires the RPC endpoint to be https too, which is why rpc.lfwa.test exists below and why
+# OTTERSCAN_RPC_URL must be set in devnet/.env. Without it the page loads and then fails to reach any
+# chain, because the browser blocks an http call from an https page.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name scan.lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:5100;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# pgweb.lfwa.test — a browser over the devnet databases (port 8081).
+#
+# Opens lfwa_api. The other two databases are lfwa_monitor and lfwa_keeper; change PGWEB_DATABASE in
+# devnet/.env and restart pgweb to switch.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name pgweb.lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# rpc.lfwa.test — the anvil JSON-RPC endpoint (port 8545).
+#
+# Present because scan.lfwa.test needs it, and useful in its own right: it is the URL to give MetaMask
+# or any wallet you want to point at the devnet (chain id 31337). Websockets are proxied because anvil
+# serves its subscription endpoint on the same port.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name rpc.lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:8545;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+
+# ---------------------------------------------------------------------------------------------------
+# control.lfwa.test — the devnet control service (port 3010).
+#
+# You do not need this for the CLI, which reaches the service inside the container. It is here so the
+# cheat/adapter/market HTTP surface can be driven with curl or from a browser console.
+#
+# It exists only in this development stack and refuses any chain that is not 31337.
+# ---------------------------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    server_name control.lfwa.test;
+
+    ssl_certificate     /home/geeksesi/public_html/services/lfwa.test/lfwa.test.crt;
+    ssl_certificate_key /home/geeksesi/public_html/services/lfwa.test/lfwa.test.key;
+
+    location / {
+        proxy_pass http://127.0.0.1:3010;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
